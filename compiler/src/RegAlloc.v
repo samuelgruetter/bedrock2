@@ -256,17 +256,19 @@ Section RegAlloc.
       clear E H2.
       destruct IHs1.
       - clear IHs2.
-
+(*
         do 2 intro.
 
 (* counterexample:
   l = {1}
   o = {0}
   f0 = {
-    0, 1, 3 -> 2,
-    2       -> 3,
-    4       -> 6,
-    _       -> 7
+    0 -> 2,
+    1 -> 2,
+    2 -> 3,
+    3 -> 2,
+    4 -> 6,
+    _ -> 7
   }
   cws1 = {}
   ls1 = {}
@@ -304,7 +306,7 @@ Section RegAlloc.
         Open Scope set_scope.
 
         idtac.
-
+*)
 
         clear case.
         unfold injective_over in *.
@@ -365,6 +367,42 @@ repeat match goal with
          | Prop => revert H
          end
        end.
+
+(*
+repeat match goal with
+       | x: _ |- _ => revert x
+       end.
+intros var register allocMap.
+Notation "'Int'" := (option register) (only printing).
+Notation "'IntSet'" := (set var) (only printing).
+Notation "'Int'" := var (only printing).
+
+(* Goal in Coq notation without unicode:
+
+  forall (l o : IntSet) (f0 : Int -> Int) (cws1 ls1 ls2 : IntSet) (a1 a2 : Int),
+  (forall a3 a4 : Int, a3 \in o -> a4 \in o -> f0 a3 = f0 a4 -> a3 = a4) ->
+  (forall a3 a4 : Int, a3 \in l -> a4 \in l -> f0 a3 = f0 a4 -> a3 = a4) ->
+  subset (union ls1 (diff ls2 cws1)) o ->
+  a1 \in union (union ls1 (diff ls2 cws1)) (diff l cws1) ->
+  a2 \in union (union ls1 (diff ls2 cws1)) (diff l cws1) ->
+  f0 a1 = f0 a2 ->
+  a1 = a2.
+*)
+
+Open Scope set_scope.
+
+(* Goal in Coq notation:
+
+    forall (l o : IntSet) (f0 : Int -> Int) (cws1 ls1 ls2 : IntSet) (a1 a2 : Int),
+    (forall a3 a4 : Int, o ∈ a3 -> o ∈ a4 -> f0 a3 = f0 a4 -> a3 = a4) ->
+    (forall a3 a4 : Int, l ∈ a3 -> l ∈ a4 -> f0 a3 = f0 a4 -> a3 = a4) ->
+    ls1 ∪ (ls2 — cws1) ⊆ o ->
+    (ls1 ∪ (ls2 — cws1)) ∪ (l — cws1) ∈ a1 ->
+    (ls1 ∪ (ls2 — cws1)) ∪ (l — cws1) ∈ a2 ->
+    f0 a1 = f0 a2 ->
+    a1 = a2
+*)
+*)
 
 (* express set operations in terms of "_ \in _" *)
 unfold subset.
@@ -456,74 +494,75 @@ idtac.
 
 (* yields the following SMT query:
 
-  (declare-fun l (Int) Bool)
-  (declare-fun o (Int) Bool)
-  (declare-fun f0 (Int) Int)
-  (declare-fun cws1 (Int) Bool)
-  (declare-fun ls1 (Int) Bool)
-  (declare-fun ls2 (Int) Bool)
-  (declare-const a1 Int)
-  (declare-const a2 Int)
-  (assert (not (implies (forall ((a3 Int))
-                         (forall ((a4 Int))
-                          (implies (o a3)
-                           (implies (o a4) (implies (= (f0 a3) (f0 a4)) (= a3 a4))))))
-                (implies (forall ((a3 Int))
-                          (forall ((a4 Int))
-                           (implies (l a3)
-                            (implies (l a4) (implies (= (f0 a3) (f0 a4)) (= a3 a4))))))
-                 (implies (forall ((x Int))
-                           (implies (or (ls1 x) (and (ls2 x) (not (cws1 x)))) (o x)))
-                  (implies (or (or (ls1 a1) (and (ls2 a1) (not (cws1 a1))))
-                            (and (l a1) (not (cws1 a1))))
-                   (implies (or (or (ls1 a2) (and (ls2 a2) (not (cws1 a2))))
-                             (and (l a2) (not (cws1 a2))))
-                    (implies (= (f0 a1) (f0 a2)) (= a1 a2)))))))))
-  (check-sat)
-  (get-model)
+    (declare-fun l (Int) Bool)
+    (declare-fun o (Int) Bool)
+    (declare-fun f0 (Int) Int)
+    (declare-fun cws1 (Int) Bool)
+    (declare-fun ls1 (Int) Bool)
+    (declare-fun ls2 (Int) Bool)
+    (declare-const a1 Int)
+    (declare-const a2 Int)
+    (assert (not
+        (implies (forall ((a3 Int))
+                  (forall ((a4 Int))
+                   (implies (o a3)
+                    (implies (o a4) (implies (= (f0 a3) (f0 a4)) (= a3 a4))))))
+         (implies (forall ((a3 Int))
+                   (forall ((a4 Int))
+                    (implies (l a3)
+                     (implies (l a4) (implies (= (f0 a3) (f0 a4)) (= a3 a4))))))
+          (implies (forall ((x Int))
+                    (implies (or (ls1 x) (and (ls2 x) (not (cws1 x)))) (o x)))
+           (implies (or (or (ls1 a1) (and (ls2 a1) (not (cws1 a1))))
+                     (and (l a1) (not (cws1 a1))))
+            (implies (or (or (ls1 a2) (and (ls2 a2) (not (cws1 a2))))
+                      (and (l a2) (not (cws1 a2))))
+             (implies (= (f0 a1) (f0 a2)) (= a1 a2)))))))))
+    (check-sat)
+    (get-model)
 
 for which Z3 answers:
 
-sat
-(model
-  (define-fun a2 () Int
-    1)
-  (define-fun a1 () Int
-    0)
-  (define-fun ls1 ((x!0 Int)) Bool
-    false)
-  (define-fun l!58 ((x!0 Int)) Bool
-    (ite (= x!0 1) true
-      false))
-  (define-fun k!56 ((x!0 Int)) Int
-    (ite (= x!0 1) 1
-    (ite (= x!0 2) 2
-    (ite (= x!0 4) 4
-    (ite (= x!0 0) 0
-    (ite (= x!0 3) 3
-      5))))))
-  (define-fun l ((x!0 Int)) Bool
-    (l!58 (k!56 x!0)))
-  (define-fun f0!57 ((x!0 Int)) Int
-    (ite (= x!0 2) 3
-    (ite (= x!0 4) 6
-    (ite (= x!0 5) 7
-      2))))
-  (define-fun f0 ((x!0 Int)) Int
-    (f0!57 (k!56 x!0)))
-  (define-fun o!60 ((x!0 Int)) Bool
-    (ite (= x!0 0) true
-      false))
-  (define-fun o ((x!0 Int)) Bool
-    (o!60 (k!56 x!0)))
-  (define-fun ls2!59 ((x!0 Int)) Bool
-    (ite (= x!0 0) true
-      false))
-  (define-fun ls2 ((x!0 Int)) Bool
-    (ls2!59 (k!56 x!0)))
-  (define-fun cws1 ((x!0 Int)) Bool
-    false)
-)
+    sat
+    (model
+      (define-fun a2 () Int
+        1)
+      (define-fun a1 () Int
+        0)
+      (define-fun ls1 ((x!0 Int)) Bool
+        false)
+      (define-fun l!58 ((x!0 Int)) Bool
+        (ite (= x!0 1) true
+          false))
+      (define-fun k!56 ((x!0 Int)) Int
+        (ite (= x!0 1) 1
+        (ite (= x!0 2) 2
+        (ite (= x!0 4) 4
+        (ite (= x!0 0) 0
+        (ite (= x!0 3) 3
+          5))))))
+      (define-fun l ((x!0 Int)) Bool
+        (l!58 (k!56 x!0)))
+      (define-fun f0!57 ((x!0 Int)) Int
+        (ite (= x!0 2) 3
+        (ite (= x!0 4) 6
+        (ite (= x!0 5) 7
+          2))))
+      (define-fun f0 ((x!0 Int)) Int
+        (f0!57 (k!56 x!0)))
+      (define-fun o!60 ((x!0 Int)) Bool
+        (ite (= x!0 0) true
+          false))
+      (define-fun o ((x!0 Int)) Bool
+        (o!60 (k!56 x!0)))
+      (define-fun ls2!59 ((x!0 Int)) Bool
+        (ite (= x!0 0) true
+          false))
+      (define-fun ls2 ((x!0 Int)) Bool
+        (ls2!59 (k!56 x!0)))
+      (define-fun cws1 ((x!0 Int)) Bool
+        false)
+    )
 
 which, more readably, corresponds to the following counterexample:
 
@@ -560,19 +599,22 @@ which, more readably, corresponds to the following counterexample:
 
 sorted and auxiliary vars removed:
 
-  l = {1}
-  o = {0}
-  f0 = {
-    0, 1, 3 -> 2,
-    2       -> 3,
-    4       -> 6,
-    _       -> 7
-  }
-  cws1 = {}
-  ls1 = {}
-  ls2 = {0}
-  a1 = 0
-  a2 = 1
+    l = {1}
+    o = {0}
+    f0 = {
+      0 -> 2,
+      1 -> 2,
+      2 -> 3,
+      3 -> 2,
+      4 -> 6,
+      _ -> 7
+    }
+    cws1 = {}
+    ls1 = {}
+    ls2 = {0}
+    a1 = 0
+    a2 = 1
+
 *)
 
         Open Scope set_scope.
